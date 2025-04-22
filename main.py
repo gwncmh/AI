@@ -159,7 +159,6 @@ async def make_move(game_state: GameState) -> AIResponse:
         book_move = api_solver.check_book_move(position, ai_player)
         
         if book_move is not None and book_move in valid_moves:
-            # Found a move in the opening book
             end_time = time.time()
             is_winning = position.is_winning_move(book_move)
             return AIResponse(
@@ -258,8 +257,8 @@ def main():
         return
     
     if api_mode:
-        print("Khởi động API Connect Four AI trên cổng 8080...")
-        uvicorn.run(app, host="0.0.0.0", port=8080)
+        print("Khởi động API Connect Four AI trên cổng 10000...")
+        uvicorn.run(app, host="0.0.0.0", port=10000)
         return
     
     if not sys.stdin.isatty() and input_from_stdin:
