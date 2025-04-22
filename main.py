@@ -154,50 +154,52 @@ async def make_move(game_state: GameState) -> AIResponse:
 
         # Start timing the AI thinking process
         start_time = time.time()
-
-        # First check for a move from the opening book
-        book_move = api_solver.check_book_move(position, ai_player)
         
-        if book_move is not None and book_move in valid_moves:
+        # Set time limit to 10 seconds
+        TIME_LIMIT_SECONDS = 10.0
+        api_solver.set_timeout(TIME_LIMIT_SECONDS)
+
+        # First check for a winning move
+        for col in valid_moves:
+            if position.is_winning_move(col):
+                end_time = time.time()
+                return AIResponse(
+                    move=col,
+                    is_winning_move=True,
+                    elapsed_time=end_time - start_time
+                )
+
+        # Check for a move from the opening book
+        book_move = api_solver.find_next_move(position, ai_player)
+        
+        if book_move is not None and position.can_play(book_move):
             end_time = time.time()
-            is_winning = position.is_winning_move(book_move)
             return AIResponse(
                 move=book_move, 
-                is_winning_move=is_winning,
+                is_winning_move=position.is_winning_move(book_move),
                 elapsed_time=end_time - start_time
             )
         
         # If no book move available, use the solver analysis
         api_solver.reset()  # Reset solver state before analysis
+        scores = api_solver.analyze(position)
         
-        # Set time limit for solver
-        api_solver.set_timeout(10)
-        
-        scores = api_solver.analyze(position, weak=False)
+        # Find the best move
         best_col = -1
         best_score = -float('inf')
         
-        # Prioritize winning moves
         for col in range(Position.WIDTH):
-            if position.can_play(col) and position.is_winning_move(col):
+            if position.can_play(col) and scores[col] > best_score and scores[col] != api_solver.INVALID_MOVE:
+                best_score = scores[col]
                 best_col = col
-                break
-                
-        # If no immediate winning move, use solver scores
-        if best_col == -1:
-            for col in range(Position.WIDTH):
-                if position.can_play(col) and scores[col] > best_score:
-                    best_score = scores[col]
-                    best_col = col
         
         if best_col != -1:
             end_time = time.time()
             elapsed = end_time - start_time
-            is_winning = position.is_winning_move(best_col)
             
             return AIResponse(
                 move=best_col,
-                is_winning_move=is_winning,
+                is_winning_move=position.is_winning_move(best_col),
                 elapsed_time=elapsed
             )
         else:
