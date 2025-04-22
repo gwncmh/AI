@@ -154,6 +154,9 @@ async def make_move(game_state: GameState) -> AIResponse:
 
         # Start timing the AI thinking process
         start_time = time.time()
+        
+        # Set time limit to 10 seconds
+        TIME_LIMIT_SECONDS = 10.0
 
         # First check for a move from the opening book
         book_move = api_solver.check_book_move(position, ai_player)
@@ -169,16 +172,29 @@ async def make_move(game_state: GameState) -> AIResponse:
         
         # If no book move available, use the solver analysis
         api_solver.reset()  # Reset solver state before analysis
-        scores = api_solver.analyze(position)
+        
+        # Set time limit for solver
+        api_solver.set_timeout(TIME_LIMIT_SECONDS)
+        
+        # Use strong solving (not weak) for maximum accuracy
+        scores = api_solver.analyze(position, weak=False)
         
         # Find the best move
         best_col = -1
         best_score = -float('inf')
         
+        # Prioritize winning moves
         for col in range(Position.WIDTH):
-            if position.can_play(col) and scores[col] > best_score:
-                best_score = scores[col]
+            if position.can_play(col) and position.is_winning_move(col):
                 best_col = col
+                break
+                
+        # If no immediate winning move, use solver scores
+        if best_col == -1:
+            for col in range(Position.WIDTH):
+                if position.can_play(col) and scores[col] > best_score:
+                    best_score = scores[col]
+                    best_col = col
         
         if best_col != -1:
             end_time = time.time()
