@@ -149,7 +149,7 @@ async def make_move(game_state: GameState) -> AIResponse:
         ai_player = game_state.current_player
         
         # Get is_new_game flag
-        is_new_game = game_state.is_new_game
+        is_new_game = getattr(game_state, 'is_new_game', False)
         
         # Check valid moves
         valid_moves = [col for col in range(Position.WIDTH) if position.can_play(col)]
@@ -161,9 +161,10 @@ async def make_move(game_state: GameState) -> AIResponse:
         
         # Set time limit to 10 seconds
         TIME_LIMIT_SECONDS = 10.0
-        api_solver.set_timeout(TIME_LIMIT_SECONDS)
+        if hasattr(api_solver, 'set_timeout'):
+            api_solver.set_timeout(TIME_LIMIT_SECONDS)
 
-        # First check for a winning move
+        # First check for a winning move - highest priority
         for col in valid_moves:
             if position.is_winning_move(col):
                 end_time = time.time()
@@ -173,9 +174,8 @@ async def make_move(game_state: GameState) -> AIResponse:
                     elapsed_time=end_time - start_time
                 )
 
-        # If it's a new game and AI goes first, use optimized first move
+        # If it's a new game and AI goes first, prefer the center or nearby columns
         if is_new_game and position.nb_moves() == 0 and ai_player == 1:
-            # Middle column is typically best for first move
             middle_col = Position.WIDTH // 2
             end_time = time.time()
             return AIResponse(
@@ -185,9 +185,13 @@ async def make_move(game_state: GameState) -> AIResponse:
             )
 
         # Check for a move from the opening book
-        book_move = api_solver.find_next_move(position, ai_player)
+        book_move = None
+        if hasattr(api_solver, 'find_next_move'):
+            book_move = api_solver.find_next_move(position, ai_player)
+        elif hasattr(api_solver, 'check_book_move'):
+            book_move = api_solver.check_book_move(position, ai_player)
         
-        if book_move is not None and position.can_play(book_move):
+        if book_move is not None and book_move in valid_moves:
             end_time = time.time()
             return AIResponse(
                 move=book_move, 
@@ -195,18 +199,29 @@ async def make_move(game_state: GameState) -> AIResponse:
                 elapsed_time=end_time - start_time
             )
         
-        # If no book move available, use the solver analysis
+        # If no book move available, use the solver analysis with increased search depth
         api_solver.reset()  # Reset solver state before analysis
-        scores = api_solver.analyze(position)
+        
+        # Use weak=False for full strength analysis
+        scores = api_solver.analyze(position, weak=False)
+        
+        # Print scores for debugging (can be removed in production)
+        print(f"Position: {position}")
+        print(f"Scores: {scores}")
         
         # Find the best move
         best_col = -1
         best_score = -float('inf')
         
-        for col in range(Position.WIDTH):
-            if position.can_play(col) and scores[col] > best_score and scores[col] != api_solver.INVALID_MOVE:
-                best_score = scores[col]
-                best_col = col
+        # Get and use the solver's column order if available (usually center-first)
+        column_order = getattr(api_solver, 'column_order', list(range(Position.WIDTH)))
+        
+        # First pass: look for winning or positive score moves
+        for col in column_order:
+            if col in valid_moves and scores[col] > best_score:
+                if scores[col] != getattr(api_solver, 'INVALID_MOVE', -1000000):
+                    best_score = scores[col]
+                    best_col = col
         
         if best_col != -1:
             end_time = time.time()
@@ -220,7 +235,15 @@ async def make_move(game_state: GameState) -> AIResponse:
         else:
             # If analysis fails, use a fallback strategy
             # Prioritize center column, then columns close to center
-            for col in api_solver.column_order:
+            center_col = Position.WIDTH // 2
+            column_priorities = [center_col]
+            for offset in range(1, (Position.WIDTH + 1) // 2):
+                if center_col - offset >= 0:
+                    column_priorities.append(center_col - offset)
+                if center_col + offset < Position.WIDTH:
+                    column_priorities.append(center_col + offset)
+            
+            for col in column_priorities:
                 if col in valid_moves:
                     end_time = time.time()
                     return AIResponse(
@@ -239,6 +262,11 @@ async def make_move(game_state: GameState) -> AIResponse:
             )
 
     except Exception as e:
+        # Log the exception for debugging
+        print(f"Error in make_move: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
         # Handle exceptions, return a safe move if possible
         if 'valid_moves' in locals() and valid_moves:
             col = valid_moves[len(valid_moves) // 2]  # Middle column if possible

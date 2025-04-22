@@ -293,64 +293,69 @@ class Position:
     @classmethod
     def from_2d_array(cls, board: List[List[int]]) -> 'Position':
         """Convert a 2D board array to a Position object"""
-        pos = cls()
-        pos._played_sequence = []  # Initialize the sequence tracking
-        
-        # Create a temporary board to track piece placement
-        temp_board = [[0 for _ in range(cls.WIDTH)] for _ in range(cls.HEIGHT)]
-        
-        # First, build the board configuration
-        for row in range(cls.HEIGHT):
-            for col in range(cls.WIDTH):
-                temp_board[row][col] = board[row][col]
-        
-        # Reconstruct the moves sequence
-        # We need to find a valid sequence of moves that would result in this board
+        # Create a new empty position
+        position = cls()
         
         # Count pieces for each player
         p1_count = sum(row.count(1) for row in board)
         p2_count = sum(row.count(2) for row in board)
         
-        # Determine whose turn it is based on piece count
-        current_player = 1 if p1_count == p2_count else 2
-        
-        # Start with an empty position
-        position = cls()
+        # Reset the played sequence
         position._played_sequence = []
         
-        # Reconstruct the board from bottom up
-        # This is a simplified approach and may not reproduce the exact sequence,
-        # but will create a valid sequence resulting in the same board state
-        moves_sequence = []
+        # Build the position by directly setting up the bitboards
+        position.current_position = 0
+        position.mask = 0
         
-        # Process columns from bottom to top
+        # Fill the bitboards based on the 2D array
+        for row in range(cls.HEIGHT):
+            for col in range(cls.WIDTH):
+                # Calculate the bit position
+                bit_pos = row + cls.HEIGHT * col
+                
+                if board[row][col] != 0:
+                    # Set the mask bit (occupied)
+                    position.mask |= (1 << bit_pos)
+                    
+                    # Set the current_position bit if it's player 1's piece
+                    if board[row][col] == 1:
+                        position.current_position |= (1 << bit_pos)
+        
+        # Determine who should play next
+        # If p1_count == p2_count, it's player 1's turn
+        # If p1_count > p2_count, it's player 2's turn
+        if p1_count > p2_count:
+            # It's player 2's turn, so flip the current_position
+            position.current_position ^= position.mask
+        
+        # Since we can't easily reconstruct the exact move sequence,
+        # we'll simulate it based on the final board state
+        # This won't affect the solver but might impact opening book usage
+        
+        # For opening book compatibility, try to track a plausible move sequence
+        # This is just an approximation and may not match the actual game history
+        total_moves = p1_count + p2_count
+        
+        # Count pieces in each column
+        col_counts = [0] * cls.WIDTH
         for col in range(cls.WIDTH):
-            for row in range(cls.HEIGHT-1, -1, -1):  # Start from bottom row
-                if board[row][col] != 0:  # If there's a piece
-                    moves_sequence.append((row, col, board[row][col]))
+            for row in range(cls.HEIGHT):
+                if board[row][col] != 0:
+                    col_counts[col] += 1
         
-        # Sort moves by row (bottom up) to ensure valid placement
-        moves_sequence.sort(key=lambda x: -x[0])
+        # Create a plausible move sequence
+        # Start with columns that have more pieces (likely played earlier)
+        cols_with_counts = [(col, count) for col, count in enumerate(col_counts) if count > 0]
+        cols_with_counts.sort(key=lambda x: -x[1])  # Sort by count, descending
         
-        # Apply moves in order, switching players as needed
-        current_player = 1  # Start with player 1
-        for _, col, player in moves_sequence:
-            # Switch player if needed
-            if player != current_player:
-                position.current_position ^= position.mask
-                current_player = player
-            
-            # Make the move
-            position.play_col(col)
-            position._played_sequence.append(col)
-            
-            # Switch back to player 1 for the next move
-            position.current_position ^= position.mask
-            current_player = 1 if current_player == 2 else 2
-        
-        # Make sure we end with the correct player's turn
-        if p1_count > p2_count:  # Player 2's turn
-            position.current_position ^= position.mask
+        # Assign moves alternating between players
+        sequence = []
+        for col, count in cols_with_counts:
+            for _ in range(count):
+                sequence.append(col)
+                
+        # Store the first 'total_moves' elements as our sequence
+        position._played_sequence = sequence[:total_moves]
         
         return position
     # Ensure the Position class has the get_played_sequence method
