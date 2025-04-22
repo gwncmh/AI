@@ -113,6 +113,7 @@ class GameState(BaseModel):
     board: List[List[int]]
     current_player: int
     valid_moves: List[int]
+    is_new_game: bool = False
 
 class AIResponse(BaseModel):
     move: int
@@ -147,6 +148,9 @@ async def make_move(game_state: GameState) -> AIResponse:
         # Get current player from game state
         ai_player = game_state.current_player
         
+        # Get is_new_game flag
+        is_new_game = game_state.is_new_game
+        
         # Check valid moves
         valid_moves = [col for col in range(Position.WIDTH) if position.can_play(col)]
         if not valid_moves:
@@ -168,6 +172,17 @@ async def make_move(game_state: GameState) -> AIResponse:
                     is_winning_move=True,
                     elapsed_time=end_time - start_time
                 )
+
+        # If it's a new game and AI goes first, use optimized first move
+        if is_new_game and position.nb_moves() == 0 and ai_player == 1:
+            # Middle column is typically best for first move
+            middle_col = Position.WIDTH // 2
+            end_time = time.time()
+            return AIResponse(
+                move=middle_col,
+                is_winning_move=False,
+                elapsed_time=end_time - start_time
+            )
 
         # Check for a move from the opening book
         book_move = api_solver.find_next_move(position, ai_player)
