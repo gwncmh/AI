@@ -11,7 +11,6 @@ class Solver:
     """
     INVALID_MOVE = -1000
     # Base column values (center columns are worth more)
-    column_values = [-1, 0, 0, 1, 0, 0, -1]
     
     def __init__(self):
         """Initialize the solver"""
@@ -19,6 +18,7 @@ class Solver:
         self.trans_table = {}  # Use an empty dict as transposition table
         self.opening_book = OpeningBook()  # Initialize opening book
         self.column_order = [3, 4, 2, 5, 1, 6, 0]
+        self.column_values = [-1, 0, 0, 1, 0, 0, -1]
 
     def load_book(self, book_file: str) -> None:
         """Load opening book from file"""
@@ -94,7 +94,7 @@ class Solver:
                 # Add base column preference value for early game
                 column_score_bonus = 0
                 if position.nb_moves() < 10:  # Early game bonus
-                    column_score_bonus = column_values[col] * (10 - position.nb_moves())
+                    column_score_bonus = self.column_values[col] * (10 - position.nb_moves())
                 
                 # Add (move, score, column_order_index) to moves list
                 moves.append((move, position.move_score(move) + column_score_bonus, i))
@@ -153,10 +153,10 @@ class Solver:
                 
                 # Score the window based on pieces count
                 if window_count_opponent == 0:  # Only current player's pieces
-                    col_factor = sum(column_values[col+i] for i in range(4)) / 4
+                    col_factor = sum(self.column_values[col+i] for i in range(4)) / 4
                     window_score = window_count_current * window_count_current * col_factor
                 elif window_count_current == 0:  # Only opponent's pieces
-                    col_factor = sum(column_values[col+i] for i in range(4)) / 4
+                    col_factor = sum(self.column_values[col+i] for i in range(4)) / 4
                     window_score = -window_count_opponent * window_count_opponent * col_factor
                 
                 score += window_score
@@ -180,9 +180,9 @@ class Solver:
                 
                 # Score the window based on pieces count
                 if window_count_opponent == 0:  # Only current player's pieces
-                    window_score = window_count_current * window_count_current * column_values[col]
+                    window_score = window_count_current * window_count_current * self.column_values[col]
                 elif window_count_current == 0:  # Only opponent's pieces
-                    window_score = -window_count_opponent * window_count_opponent * column_values[col]
+                    window_score = -window_count_opponent * window_count_opponent * self.column_values[col]
                 
                 score += window_score
         
@@ -206,10 +206,10 @@ class Solver:
                 
                 # Score the window based on pieces count
                 if window_count_opponent == 0:  # Only current player's pieces
-                    col_factor = sum(column_values[col+i] for i in range(4)) / 4
+                    col_factor = sum(self.column_values[col+i] for i in range(4)) / 4
                     window_score = window_count_current * window_count_current * col_factor
                 elif window_count_current == 0:  # Only opponent's pieces
-                    col_factor = sum(column_values[col+i] for i in range(4)) / 4
+                    col_factor = sum(self.column_values[col+i] for i in range(4)) / 4
                     window_score = -window_count_opponent * window_count_opponent * col_factor
                 
                 score += window_score
@@ -234,10 +234,10 @@ class Solver:
                 
                 # Score the window based on pieces count
                 if window_count_opponent == 0:  # Only current player's pieces
-                    col_factor = sum(column_values[col+i] for i in range(4)) / 4
+                    col_factor = sum(self.column_values[col+i] for i in range(4)) / 4
                     window_score = window_count_current * window_count_current * col_factor
                 elif window_count_current == 0:  # Only opponent's pieces
-                    col_factor = sum(column_values[col+i] for i in range(4)) / 4
+                    col_factor = sum(self.column_values[col+i] for i in range(4)) / 4
                     window_score = -window_count_opponent * window_count_opponent * col_factor
                 
                 score += window_score
@@ -266,7 +266,7 @@ class Solver:
                     test_pos.play_col(col)
                     
                     if test_pos.check_win(test_pos.current_position ^ test_pos.mask):
-                        score += 5 * column_values[col]  # Potential future win
+                        score += 5 * self.column_values[col]  # Potential future win
         
         return score
 
