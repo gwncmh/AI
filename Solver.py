@@ -27,16 +27,6 @@ class Solver:
         return self.opening_book.save_to_file(book_file)
 
     def check_book_move(self, position: Position, ai_player: int) -> int:
-        """
-        Check if there's a move in the opening book
-        
-        Args:
-            position: Current position
-            ai_player: AI player number (1 or 2)
-            
-        Returns:
-            Column to play or None if no book move found
-        """
         return self.opening_book.find_next_move(position, ai_player)
 
     def add_to_book(self, sequence: str, winner: int) -> None:
@@ -131,18 +121,8 @@ class Solver:
         return alpha
 
     def evaluate_position(self, position: Position) -> int:
-        """
-        Evaluate a position with heuristics for Connect 4.
-        Higher return value means better position for the current player.
-        
-        Args:
-            position: Position to evaluate
-            
-        Returns:
-            Integer score representing position strength
-        """
         # Base column values (center columns are worth more)
-        column_values = [-3, -1, 1, 3, 1, -1, -3]
+        column_values = [-1, 0, 0, 1, 0, 0, -1]
         
         # If it's a win-in-one position, return a high score
         if position.can_win_next():
@@ -175,8 +155,6 @@ class Solver:
                 
                 # Score the window based on pieces count
                 if window_count_opponent == 0:  # Only current player's pieces
-                    # Weight by number of pieces with a square factor (more pieces = much higher score)
-                    # Also weigh by average column value of the window
                     col_factor = sum(column_values[col+i] for i in range(4)) / 4
                     window_score = window_count_current * window_count_current * col_factor
                 elif window_count_current == 0:  # Only opponent's pieces
@@ -192,7 +170,6 @@ class Solver:
                 window_count_current = 0
                 window_count_opponent = 0
                 
-                # Check 4 consecutive positions vertically
                 for i in range(4):
                     pos = col * (Position.HEIGHT + 1) + (row + i)
                     current_bit = (current_player_bits & (1 << pos)) != 0
@@ -272,9 +249,9 @@ class Solver:
         for row in range(Position.HEIGHT):
             pos = center_col * (Position.HEIGHT + 1) + row
             if current_player_bits & (1 << pos):
-                score += 3  # Bonus for controlling center column
+                score += 2  # Bonus for controlling center column
             elif opponent_bits & (1 << pos):
-                score -= 3  # Penalty for opponent controlling center column
+                score -= 2  # Penalty for opponent controlling center column
         
         # Check for pieces that can be connected on the next move
         # (potential to create threats)
@@ -332,16 +309,6 @@ class Solver:
         return min_score
 
     def analyze(self, position: Position, weak: bool = False) -> List[int]:
-        """
-        Analyze all possible moves from a position.
-        
-        Args:
-            position: Position to analyze
-            weak: If true, only distinguish between win/draw/loss
-            
-        Returns:
-            List of scores for each column, INVALID_MOVE for invalid moves
-        """
         scores = [self.INVALID_MOVE] * Position.WIDTH
         
         # Check each column
