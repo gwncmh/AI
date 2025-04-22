@@ -37,31 +37,76 @@ class OpeningBook:
         return 3
     
     def find_next_move(self, position, ai_player):
-        # Get the current sequence of moves
-        current_sequence = position.get_played_sequence()
-        sequence_length = len(current_sequence)
-        
-        # Check if this is the first move and AI is player 1
-        if sequence_length == 0 and ai_player == 1:
-            return self.get_first_move()
-        
-        # Determine if AI plays odd or even positions based on whether it went first
-        ai_plays_first = ai_player == 1
-        next_move_is_odd = sequence_length % 2 == 0
-        ai_should_play = (ai_plays_first and next_move_is_odd) or (not ai_plays_first and not next_move_is_odd)
-        
-        # If it's not AI's turn, don't use the opening book
-        if not ai_should_play:
-            return None
-        
-        # Look for a known sequence that matches the current sequence prefix
-        for known_sequence, data in self.winning_sequences.items():
-            if current_sequence == known_sequence[:sequence_length]:
-                if sequence_length < len(known_sequence):
-                    next_move = int(known_sequence[sequence_length]) - 1
-                    if position.can_play(next_move):
-                        return next_move
+    # Get the current sequence of moves
+    current_sequence = position.get_played_sequence()
+    sequence_length = len(current_sequence)
+    
+    # Check if this is the first move and AI is player 1
+    if sequence_length == 0 and ai_player == 1:
+        return self.get_first_move()
+    
+    # Determine if AI plays odd or even positions based on whether it went first
+    ai_plays_first = ai_player == 1
+    next_move_is_odd = sequence_length % 2 == 0
+    ai_should_play = (ai_plays_first and next_move_is_odd) or (not ai_plays_first and not next_move_is_odd)
+    
+    # If it's not AI's turn, don't use the opening book
+    if not ai_should_play:
         return None
+    
+    # First, look for a matching sequence in battles.txt
+    battle_move = self.check_battles_book(current_sequence, ai_player)
+    if battle_move is not None and position.can_play(battle_move):
+        return battle_move
+    
+    return None
+
+    def check_battles_book(self, current_sequence, ai_player):
+        """Check battles.txt for a matching sequence and determine the best next move"""
+        try:
+            with open("battles.txt", "r") as file:
+                best_move = None
+                best_score = -float('inf')
+                sequence_length = len(current_sequence)
+                
+                for line in file:
+                    parts = line.strip().split(':')
+                    if len(parts) < 2:
+                        continue
+                    
+                    sequence = parts[0]
+                    result = int(parts[1])  # 0=draw, 1=human win, 2=AI win
+                    
+                    # Skip if the sequence doesn't match our current position
+                    if current_sequence != sequence[:sequence_length]:
+                        continue
+                    
+                    # If there's a next move in the sequence
+                    if sequence_length < len(sequence):
+                        next_move = int(sequence[sequence_length]) - 1
+                        
+                        # Calculate a score for this move based on the outcome
+                        # Prefer AI wins, then draws, avoid human wins
+                        move_score = 0
+                        if result == 2:  # AI win
+                            move_score = 100  # High priority for AI winning moves
+                        elif result == 0:  # Draw
+                            move_score = 50   # Medium priority for drawing moves
+                        else:  # Human win
+                            move_score = -50  # Avoid moves that led to human wins
+                        
+                        # Prefer more recent games (assuming they're at the end of the file)
+                        move_score += 0.1
+                        
+                        # Update best move if this one is better
+                        if move_score > best_score:
+                            best_score = move_score
+                            best_move = next_move
+                
+                return best_move
+        except Exception as e:
+            print(f"Error reading battles.txt: {e}")
+            return None
     
     def add_sequence(self, sequence, winner):
         self.winning_sequences[sequence] = {"winner": winner}

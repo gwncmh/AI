@@ -257,7 +257,7 @@ def main():
 
     # Load opening book if specified
     if opening_book_file:
-        if solver.lo_book(opening_book_file):
+        if solver.load_book(opening_book_file):
             print("Opening book loaded successfully")
         else:
             print("Failed to load opening book")

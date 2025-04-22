@@ -10,7 +10,9 @@ class Solver:
     and various optimization techniques.
     """
     INVALID_MOVE = -1000
-
+    # Base column values (center columns are worth more)
+    column_values = [-1, 0, 0, 1, 0, 0, -1]
+    
     def __init__(self):
         """Initialize the solver"""
         self.node_count = 0
@@ -92,8 +94,6 @@ class Solver:
                 # Add base column preference value for early game
                 column_score_bonus = 0
                 if position.nb_moves() < 10:  # Early game bonus
-                    # Center columns get higher bonus
-                    column_values = [-3, -1, 1, 3, 1, -1, -3]
                     column_score_bonus = column_values[col] * (10 - position.nb_moves())
                 
                 # Add (move, score, column_order_index) to moves list
@@ -121,8 +121,6 @@ class Solver:
         return alpha
 
     def evaluate_position(self, position: Position) -> int:
-        # Base column values (center columns are worth more)
-        column_values = [-1, 0, 0, 1, 0, 0, -1]
         
         # If it's a win-in-one position, return a high score
         if position.can_win_next():
@@ -249,9 +247,9 @@ class Solver:
         for row in range(Position.HEIGHT):
             pos = center_col * (Position.HEIGHT + 1) + row
             if current_player_bits & (1 << pos):
-                score += 2  # Bonus for controlling center column
+                score += 1  # Bonus for controlling center column
             elif opponent_bits & (1 << pos):
-                score -= 2  # Penalty for opponent controlling center column
+                score -= 1  # Penalty for opponent controlling center column
         
         # Check for pieces that can be connected on the next move
         # (potential to create threats)
@@ -267,9 +265,6 @@ class Solver:
                     test_pos = position.copy()
                     test_pos.play_col(col)
                     
-                    # Check if this creates future opportunities (2-in-a-row, 3-in-a-row)
-                    # This is a simplified check - in a real implementation you might want to
-                    # check more thoroughly for threats
                     if test_pos.check_win(test_pos.current_position ^ test_pos.mask):
                         score += 5 * column_values[col]  # Potential future win
         
