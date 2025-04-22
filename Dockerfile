@@ -28,4 +28,4 @@ EXPOSE $PORT
 
 
 # Khởi chạy ứng dụng với uvicorn
-CMD uvicorn app:app --host 0.0.0.0 --port $PORT
+CMD uvicorn main:app --host 0.0.0.0 --port $PORT
