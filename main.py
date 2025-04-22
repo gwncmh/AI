@@ -151,26 +151,21 @@ async def health_check():
 @app.post("/api/connect4-move")
 async def make_move(game_state: GameState) -> AIResponse:
     try:
-        # Validate input
         if not game_state.valid_moves:
-            raise ValueError("No valid moves available")
+            raise ValueError("Không có nước đi hợp lệ")
             
         # Convert board to Position object
         position = Position.from_2d_array(game_state.board)
         
-        # Check for winning moves first
+        # Check for immediate winning moves
         for col in game_state.valid_moves:
             if position.is_winning_move(col):
-                return AIResponse(move=col, is_winning_move=True)
+                return AIResponse(move=col)
         
-        # If new game, prefer the center column
-        if game_state.is_new_game and 3 in game_state.valid_moves:
-            return AIResponse(move=3)
-            
         # Use solver to analyze the position
         scores = solver.analyze(position)
         
-        # Find best move based on scores
+        # Find the best move based on scores
         best_col = -1
         best_score = float('-inf')
         
@@ -182,12 +177,11 @@ async def make_move(game_state: GameState) -> AIResponse:
         if best_col != -1:
             return AIResponse(move=best_col)
         
-        # Fallback to a random move if analysis fails
-        selected_move = random.choice(game_state.valid_moves) 
+        # Fallback to random move if analysis fails
+        selected_move = random.choice(game_state.valid_moves)
         return AIResponse(move=selected_move)
         
     except Exception as e:
-        # Provide a safe fallback
         if game_state.valid_moves:
             return AIResponse(move=game_state.valid_moves[0])
         raise HTTPException(status_code=400, detail=str(e))
