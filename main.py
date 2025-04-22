@@ -109,16 +109,25 @@ def play_vs_ai(solver: Solver):
         
         human_turn = not human_turn
     
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 class GameState(BaseModel):
     board: List[List[int]]
     current_player: int
     valid_moves: List[int]
-    is_new_game: bool = False
+    is_new_game: bool = False  # Optional parameter to identify new games
 
 class AIResponse(BaseModel):
     move: int
-    is_winning_move: bool = False
-    elapsed_time: float = 0.0
+    is_winning_move: bool = False  # Optional info about move quality
+    elapsed_time: float = 0.0  # Optional timing information
 
 app = FastAPI()
 app.add_middleware(
@@ -138,140 +147,49 @@ TIME_LIMIT_MS = 8000
 @app.get("/api/test")
 async def health_check():
     return {"status": "ok", "message": "Server is running"}
-    
+
 @app.post("/api/connect4-move")
 async def make_move(game_state: GameState) -> AIResponse:
     try:
-        # Convert board from request to Position object
+        # Validate input
+        if not game_state.valid_moves:
+            raise ValueError("No valid moves available")
+            
+        # Convert board to Position object
         position = Position.from_2d_array(game_state.board)
         
-        # Get current player from game state
-        ai_player = game_state.current_player
-        
-        # Get is_new_game flag
-        is_new_game = getattr(game_state, 'is_new_game', False)
-        
-        # Check valid moves
-        valid_moves = [col for col in range(Position.WIDTH) if position.can_play(col)]
-        if not valid_moves:
-            raise ValueError("No valid moves available")
-
-        # Start timing the AI thinking process
-        start_time = time.time()
-        
-        # Set time limit to 10 seconds
-        TIME_LIMIT_SECONDS = 10.0
-        if hasattr(api_solver, 'set_timeout'):
-            api_solver.set_timeout(TIME_LIMIT_SECONDS)
-
-        # First check for a winning move - highest priority
-        for col in valid_moves:
+        # Check for winning moves first
+        for col in game_state.valid_moves:
             if position.is_winning_move(col):
-                end_time = time.time()
-                return AIResponse(
-                    move=col,
-                    is_winning_move=True,
-                    elapsed_time=end_time - start_time
-                )
-
-        # If it's a new game and AI goes first, prefer the center or nearby columns
-        if is_new_game and position.nb_moves() == 0 and ai_player == 1:
-            middle_col = Position.WIDTH // 2
-            end_time = time.time()
-            return AIResponse(
-                move=middle_col,
-                is_winning_move=False,
-                elapsed_time=end_time - start_time
-            )
-
-        # Check for a move from the opening book
-        book_move = None
-        if hasattr(api_solver, 'find_next_move'):
-            book_move = api_solver.find_next_move(position, ai_player)
-        elif hasattr(api_solver, 'check_book_move'):
-            book_move = api_solver.check_book_move(position, ai_player)
+                return AIResponse(move=col, is_winning_move=True)
         
-        if book_move is not None and book_move in valid_moves:
-            end_time = time.time()
-            return AIResponse(
-                move=book_move, 
-                is_winning_move=position.is_winning_move(book_move),
-                elapsed_time=end_time - start_time
-            )
+        # If new game, prefer the center column
+        if game_state.is_new_game and 3 in game_state.valid_moves:
+            return AIResponse(move=3)
+            
+        # Use solver to analyze the position
+        scores = solver.analyze(position)
         
-        # If no book move available, use the solver analysis with increased search depth
-        api_solver.reset()  # Reset solver state before analysis
-        
-        # Use weak=False for full strength analysis
-        scores = api_solver.analyze(position, weak=False)
-        
-        # Print scores for debugging (can be removed in production)
-        print(f"Position: {position}")
-        print(f"Scores: {scores}")
-        
-        # Find the best move
+        # Find best move based on scores
         best_col = -1
-        best_score = -float('inf')
+        best_score = float('-inf')
         
-        # Get and use the solver's column order if available (usually center-first)
-        column_order = getattr(api_solver, 'column_order', list(range(Position.WIDTH)))
-        
-        # First pass: look for winning or positive score moves
-        for col in column_order:
-            if col in valid_moves and scores[col] > best_score:
-                if scores[col] != getattr(api_solver, 'INVALID_MOVE', -1000000):
-                    best_score = scores[col]
-                    best_col = col
-        
+        for col in game_state.valid_moves:
+            if scores[col] > best_score:
+                best_score = scores[col]
+                best_col = col
+                
         if best_col != -1:
-            end_time = time.time()
-            elapsed = end_time - start_time
-            
-            return AIResponse(
-                move=best_col,
-                is_winning_move=position.is_winning_move(best_col),
-                elapsed_time=elapsed
-            )
-        else:
-            # If analysis fails, use a fallback strategy
-            # Prioritize center column, then columns close to center
-            center_col = Position.WIDTH // 2
-            column_priorities = [center_col]
-            for offset in range(1, (Position.WIDTH + 1) // 2):
-                if center_col - offset >= 0:
-                    column_priorities.append(center_col - offset)
-                if center_col + offset < Position.WIDTH:
-                    column_priorities.append(center_col + offset)
-            
-            for col in column_priorities:
-                if col in valid_moves:
-                    end_time = time.time()
-                    return AIResponse(
-                        move=col,
-                        is_winning_move=position.is_winning_move(col),
-                        elapsed_time=end_time - start_time
-                    )
-            
-            # Last resort: random move
-            random_col = random.choice(valid_moves)
-            end_time = time.time()
-            return AIResponse(
-                move=random_col,
-                is_winning_move=position.is_winning_move(random_col),
-                elapsed_time=end_time - start_time
-            )
-
-    except Exception as e:
-        # Log the exception for debugging
-        print(f"Error in make_move: {str(e)}")
-        import traceback
-        traceback.print_exc()
+            return AIResponse(move=best_col)
         
-        # Handle exceptions, return a safe move if possible
-        if 'valid_moves' in locals() and valid_moves:
-            col = valid_moves[len(valid_moves) // 2]  # Middle column if possible
-            return AIResponse(move=col)
-        # If no safe move can be found, report error
+        # Fallback to a random move if analysis fails
+        selected_move = random.choice(game_state.valid_moves) 
+        return AIResponse(move=selected_move)
+        
+    except Exception as e:
+        # Provide a safe fallback
+        if game_state.valid_moves:
+            return AIResponse(move=game_state.valid_moves[0])
         raise HTTPException(status_code=400, detail=str(e))
 
 def main():
