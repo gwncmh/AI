@@ -259,17 +259,31 @@ class Position:
 
     def __str__(self) -> str:
         board = []
+        # Hiển thị số cột
         board.append("  " + "  ".join([str(i+1) for i in range(Position.WIDTH)]))
+        current_player_is_human = (self.moves % 2 == 0)
+        
+        # Duyệt qua từng ô
         for row in range(Position.HEIGHT-1, -1, -1):
             line = []
             for col in range(Position.WIDTH):
                 mask = 1 << (col * (Position.HEIGHT + 1) + row)
-                if not (self.mask & mask):
-                    line.append(".")
+                if self.mask & mask:
+                    # Nếu ô đã được đánh
+                    if self.current_position & mask:
+                        # Quân cờ thuộc về người chơi HIỆN TẠI
+                        symbol = 'O' if current_player_is_human else 'X'
+                    else:
+                        # Quân cờ thuộc về người chơi TRƯỚC ĐÓ
+                        symbol = 'X' if current_player_is_human else 'O'
+                    line.append(symbol)
                 else:
-                    line.append('X' if (self.current_position & mask) else 'O')
+                    line.append(".")
             board.append("| " + " | ".join(line) + " |")
+        
+        # Đường viền dưới
         board.append("+" + "---+" * Position.WIDTH)
+        
         return "\n".join(board)
 
     @classmethod
