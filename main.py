@@ -117,32 +117,6 @@ def play_vs_ai(solver: Solver, human_turn: bool = False):
 
         current_turn = not current_turn
     
-class GameState(BaseModel):
-    board: List[List[int]]
-    current_player: int
-    valid_moves: List[int]
-    is_new_game: bool = False
-
-class AIResponse(BaseModel):
-    move: int
-    is_winning_move: bool = False
-    elapsed_time: float = 0.0
-
-app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-api_solver = Solver()
-
-@app.get("/api/test")
-async def health_check():
-    return {"status": "ok", "message": "Server is running"}
-
 @app.post("/api/connect4-move")
 async def make_move(game_state: GameState) -> AIResponse:
     try:
@@ -153,8 +127,16 @@ async def make_move(game_state: GameState) -> AIResponse:
         ai_player = game_state.current_player
         print(f"Current player: {ai_player}")
 
-        valid_moves = [col for col in range(Position.WIDTH) if position.can_play(col)]
-        print(f"Valid moves: {valid_moves}")
+        # Debug valid moves from both sources
+        api_valid_moves = game_state.valid_moves
+        pos_valid_moves = [col for col in range(Position.WIDTH) if position.can_play(col)]
+        print(f"API valid moves: {api_valid_moves}")
+        print(f"Position valid moves: {pos_valid_moves}")
+        
+        # Trust the game state's valid moves over the Position class calculation
+        valid_moves = api_valid_moves if api_valid_moves else pos_valid_moves
+        
+        print(f"Using valid moves: {valid_moves}")
         if not valid_moves:
             print("No valid moves available")
             raise ValueError("No valid moves available")
@@ -176,8 +158,8 @@ async def make_move(game_state: GameState) -> AIResponse:
 
         # Check for immediate winning moves
         print("Checking for winning moves before analysis")
-        for col in range(Position.WIDTH):
-            if position.can_play(col) and position.is_winning_move(col):
+        for col in valid_moves:
+            if position.is_winning_move(col):
                 end_time = time.time()
                 print(f"Found immediate winning move: {col}")
                 return AIResponse(
@@ -192,11 +174,12 @@ async def make_move(game_state: GameState) -> AIResponse:
         api_solver.set_timeout(9.0)
         print(f"Analyzing position: {position}")
 
-        # Run solver with timeout
+        # Run solver with timeout - fixed coroutine handling
         try:
-            async def run_solver():
-                return api_solver.analyze(position, weak=False)
-            scores = await asyncio.wait_for(asyncio.to_thread(run_solver), timeout=9.0)
+            scores = await asyncio.wait_for(
+                asyncio.to_thread(lambda: api_solver.analyze(position, weak=False)), 
+                timeout=9.0
+            )
             print(f"Analysis completed, scores: {scores}")
         except asyncio.TimeoutError:
             print("Solver timed out")
@@ -212,8 +195,8 @@ async def make_move(game_state: GameState) -> AIResponse:
         best_col = -1
         best_score = -float('inf')
         print("Selecting best move from scores")
-        for col in range(Position.WIDTH):
-            if position.can_play(col) and scores[col] > best_score:
+        for col in valid_moves:  # Use valid_moves instead of range(Position.WIDTH)
+            if scores[col] > best_score:
                 best_score = scores[col]
                 best_col = col
                 print(f"New best move: {best_col} with score: {best_score}")
@@ -230,16 +213,17 @@ async def make_move(game_state: GameState) -> AIResponse:
             )
         else:
             print("No best move found, checking column order")
-            for col in api_solver.column_order:
-                if col in valid_moves:
-                    end_time = time.time()
-                    is_winning = position.is_winning_move(col)
-                    print(f"Using column order move: {col}, is_winning: {is_winning}")
-                    return AIResponse(
-                        move=col,
-                        is_winning_move=is_winning,
-                        elapsed_time=end_time - start_time
-                    )
+            preferred_columns = [col for col in api_solver.column_order if col in valid_moves]
+            if preferred_columns:
+                col = preferred_columns[0]
+                end_time = time.time()
+                is_winning = position.is_winning_move(col)
+                print(f"Using column order move: {col}, is_winning: {is_winning}")
+                return AIResponse(
+                    move=col,
+                    is_winning_move=is_winning,
+                    elapsed_time=end_time - start_time
+                )
 
             random_col = random.choice(valid_moves)
             end_time = time.time()
@@ -257,6 +241,10 @@ async def make_move(game_state: GameState) -> AIResponse:
         if 'valid_moves' in locals() and valid_moves:
             col = random.choice(valid_moves)
             print(f"Falling back to random valid move: {col}")
+            return AIResponse(move=col)
+        elif 'game_state' in locals() and hasattr(game_state, 'valid_moves') and game_state.valid_moves:
+            col = random.choice(game_state.valid_moves)
+            print(f"Falling back to random game state move: {col}")
             return AIResponse(move=col)
         raise HTTPException(status_code=400, detail=str(e))
 def main():
