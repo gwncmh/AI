@@ -1,9 +1,10 @@
 import sys
 import struct
 import numpy as np
-import random
 import pickle
 import traceback
+import random
+import asyncio
 from collections import defaultdict
 import time
 from typing import List, Dict, Tuple, Optional
@@ -141,16 +142,17 @@ api_solver = Solver()
 @app.get("/api/test")
 async def health_check():
     return {"status": "ok", "message": "Server is running"}
-    
+
 @app.post("/api/connect4-move")
 async def make_move(game_state: GameState) -> AIResponse:
     try:
         print(f"Received game state: {game_state}")
-        position = Position.from_2d_array(game_state.board)
+        position = Position.from_2d_array(game_state.board, game_state.current_player)
+        print(f"Bitboard: current_position={bin(position.current_position)}, mask={bin(position.mask)}")
         print(f"Converted position: {position}")
         ai_player = game_state.current_player
         print(f"Current player: {ai_player}")
-        
+
         valid_moves = [col for col in range(Position.WIDTH) if position.can_play(col)]
         print(f"Valid moves: {valid_moves}")
         if not valid_moves:
@@ -161,42 +163,61 @@ async def make_move(game_state: GameState) -> AIResponse:
         print(f"Checking book move at: {start_time}")
         book_move = api_solver.check_book_move(position, ai_player)
         print(f"Book move result: {book_move}")
-        
+
         if book_move is not None and book_move in valid_moves:
             end_time = time.time()
             is_winning = position.is_winning_move(book_move)
             print(f"Using book move: {book_move}, is_winning: {is_winning}, time: {end_time - start_time}")
             return AIResponse(
-                move=book_move, 
+                move=book_move,
                 is_winning_move=is_winning,
                 elapsed_time=end_time - start_time
             )
-        
-        print("Resetting solver")
-        api_solver.reset() 
-        api_solver.set_timeout(9.0)
-        print("Analyzing position")
-        
-        scores = api_solver.analyze(position, weak=False)
-        print(f"Analysis scores: {scores}")
-        best_col = -1
-        best_score = -float('inf')
-        
-        print("Checking for winning moves")
+
+        # Check for immediate winning moves
+        print("Checking for winning moves before analysis")
         for col in range(Position.WIDTH):
             if position.can_play(col) and position.is_winning_move(col):
+                end_time = time.time()
+                print(f"Found immediate winning move: {col}")
+                return AIResponse(
+                    move=col,
+                    is_winning_move=True,
+                    elapsed_time=end_time - start_time
+                )
+
+        print(f"Solver state before reset: {api_solver}")
+        api_solver.reset()
+        print(f"Solver state after reset: {api_solver}")
+        api_solver.set_timeout(9.0)
+        print(f"Analyzing position: {position}")
+
+        # Run solver with timeout
+        try:
+            async def run_solver():
+                return api_solver.analyze(position, weak=False)
+            scores = await asyncio.wait_for(asyncio.to_thread(run_solver), timeout=9.0)
+            print(f"Analysis completed, scores: {scores}")
+        except asyncio.TimeoutError:
+            print("Solver timed out")
+            random_col = random.choice(valid_moves)
+            end_time = time.time()
+            print(f"Falling back to random move: {random_col}")
+            return AIResponse(
+                move=random_col,
+                is_winning_move=position.is_winning_move(random_col),
+                elapsed_time=end_time - start_time
+            )
+
+        best_col = -1
+        best_score = -float('inf')
+        print("Selecting best move from scores")
+        for col in range(Position.WIDTH):
+            if position.can_play(col) and scores[col] > best_score:
+                best_score = scores[col]
                 best_col = col
-                print(f"Found winning move: {best_col}")
-                break
-                
-        if best_col == -1:
-            print("No winning move found, selecting best score")
-            for col in range(Position.WIDTH):
-                if position.can_play(col) and scores[col] > best_score:
-                    best_score = scores[col]
-                    best_col = col
-                    print(f"New best move: {best_col} with score: {best_score}")
-        
+                print(f"New best move: {best_col} with score: {best_score}")
+
         if best_col != -1:
             end_time = time.time()
             elapsed = end_time - start_time
@@ -219,7 +240,7 @@ async def make_move(game_state: GameState) -> AIResponse:
                         is_winning_move=is_winning,
                         elapsed_time=end_time - start_time
                     )
-            
+
             random_col = random.choice(valid_moves)
             end_time = time.time()
             print(f"Falling back to random move: {random_col}")
@@ -234,11 +255,10 @@ async def make_move(game_state: GameState) -> AIResponse:
         print("Stack trace:")
         traceback.print_exc()
         if 'valid_moves' in locals() and valid_moves:
-            col = valid_moves[len(valid_moves) // 2]
-            print(f"Falling back to middle valid move: {col}")
+            col = random.choice(valid_moves)
+            print(f"Falling back to random valid move: {col}")
             return AIResponse(move=col)
         raise HTTPException(status_code=400, detail=str(e))
-
 def main():
     solver = Solver()
     weak = False
