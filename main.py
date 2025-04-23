@@ -3,6 +3,7 @@ import struct
 import numpy as np
 import random
 import pickle
+import traceback
 from collections import defaultdict
 import time
 from typing import List, Dict, Tuple, Optional
@@ -230,6 +231,8 @@ async def make_move(game_state: GameState) -> AIResponse:
 
     except Exception as e:
         print(f"Error occurred: {str(e)}")
+        print("Stack trace:")
+        traceback.print_exc()
         if 'valid_moves' in locals() and valid_moves:
             col = valid_moves[len(valid_moves) // 2]
             print(f"Falling back to middle valid move: {col}")
