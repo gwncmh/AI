@@ -147,7 +147,13 @@ async def health_check():
 async def make_move(game_state: GameState) -> AIResponse:
     try:
         print(f"Received game state: {game_state}")
-        position = Position.from_2d_array(game_state.board, game_state.current_player)
+        
+        # Use the convert_to_bitboard method instead of from_2d_array
+        position_bits, mask_bits, moves = Position.convert_to_bitboard(game_state.board, game_state.current_player)
+        
+        # Create a new Position instance with the converted values
+        position = Position(current_position=position_bits, mask=mask_bits, moves=moves)
+        
         print(f"Bitboard: current_position={bin(position.current_position)}, mask={bin(position.mask)}")
         print(f"Converted position: {position}")
         ai_player = game_state.current_player
@@ -181,8 +187,7 @@ async def make_move(game_state: GameState) -> AIResponse:
                 is_winning_move=is_winning,
                 elapsed_time=end_time - start_time
             )
-
-        # Check for immediate winning moves
+        
         print("Checking for winning moves before analysis")
         for col in valid_moves:
             if position.is_winning_move(col):
@@ -200,7 +205,6 @@ async def make_move(game_state: GameState) -> AIResponse:
         api_solver.set_timeout(9.0)
         print(f"Analyzing position: {position}")
 
-        # Run solver with timeout - fixed coroutine handling
         try:
             scores = await asyncio.wait_for(
                 asyncio.to_thread(lambda: api_solver.analyze(position, weak=False)), 

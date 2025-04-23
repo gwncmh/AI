@@ -286,32 +286,24 @@ class Position:
         
         return "\n".join(board)
 
-    @classmethod
-    def from_2d_array(cls, board: List[List[int]], current_player: int = 1) -> 'Position':
-        position = cls()
-        position._played_sequence = []
-        position.current_position = 0
-        position.mask = 0
-        
-        # Print raw board for debugging
-        print("Raw board data:")
-        for row in board:
-            print(row)
-        
-        # Row 0 is at the top in the UI but should be at the bottom in our representation
-        for row_idx, row in enumerate(board):
-            for col, cell in enumerate(row):
-                if cell != 0:
-                    # Calculate the correct bit position
-                    # If using bottom-up representation, adjust row_idx
-                    adjusted_row = row_idx  # May need to be adjusted based on your internal representation
-                    bit_pos = col * (cls.HEIGHT + 1) + adjusted_row
-                    position.mask |= (1 << bit_pos)
-                    if cell == current_player:
-                        position.current_position |= (1 << bit_pos)
-        
-        position.moves = sum(row.count(1) + row.count(2) for row in board)
-        return position
+    @staticmethod
+    def convert_to_bitboard(board: List[List[int]], current_player: int):
+        WIDTH, HEIGHT = 7, 6
+        position = np.uint64(0)
+        mask = np.uint64(0)
+        moves = 0
+
+        # Duyệt theo hàng (từ dưới lên)
+        for row in reversed(range(HEIGHT)):  # Hàng 5 là dưới cùng
+            for col in range(WIDTH):
+                if board[row][col] != 0:  # Truy cập [hàng][cột]
+                    bit = col * (HEIGHT + 1) + (HEIGHT - 1 - row)  # Tính bit chính xác
+                    mask |= np.uint64(1) << np.uint64(bit)
+                    if board[row][col] == current_player:
+                        position |= np.uint64(1) << np.uint64(bit)
+                    moves += 1
+
+        return position, mask, moves
     # Ensure the Position class has the get_played_sequence method
     def get_played_sequence(self) -> str:
         """
