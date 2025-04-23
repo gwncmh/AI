@@ -259,104 +259,35 @@ class Position:
 
     def __str__(self) -> str:
         board = []
-        # Hiển thị số cột
         board.append("  " + "  ".join([str(i+1) for i in range(Position.WIDTH)]))
-        
-        # Xác định người chơi hiện tại dựa trên số nước đi
-        # Nếu số nước đi chẵn: lượt của người chơi (O)
-        # Nếu số nước đi lẻ: lượt của AI (X)
-        current_player_is_human = (self.moves % 2 == 0)
-        
-        # Duyệt qua từng ô
         for row in range(Position.HEIGHT-1, -1, -1):
             line = []
             for col in range(Position.WIDTH):
                 mask = 1 << (col * (Position.HEIGHT + 1) + row)
-                if self.mask & mask:
-                    # Nếu ô đã được đánh
-                    if self.current_position & mask:
-                        # Quân cờ thuộc về người chơi HIỆN TẠI
-                        symbol = 'O' if current_player_is_human else 'X'
-                    else:
-                        # Quân cờ thuộc về người chơi TRƯỚC ĐÓ
-                        symbol = 'X' if current_player_is_human else 'O'
-                    line.append(symbol)
-                else:
+                if not (self.mask & mask):
                     line.append(".")
+                else:
+                    line.append('X' if (self.current_position & mask) else 'O')
             board.append("| " + " | ".join(line) + " |")
-        
-        # Đường viền dưới
         board.append("+" + "---+" * Position.WIDTH)
-        
         return "\n".join(board)
 
     @classmethod
-    def from_2d_array(cls, board: List[List[int]]) -> 'Position':
-        """Convert a 2D board array to a Position object"""
-        # Create a new empty position
+    def from_2d_array(cls, board: List[List[int]], current_player: int = 1) -> 'Position':
         position = cls()
-        
-        # Count pieces for each player
-        p1_count = sum(row.count(1) for row in board)
-        p2_count = sum(row.count(2) for row in board)
-        
-        # Reset the played sequence
         position._played_sequence = []
-        
-        # Build the position by directly setting up the bitboards
         position.current_position = 0
         position.mask = 0
-        
-        # Fill the bitboards based on the 2D array
         for row in range(cls.HEIGHT):
             for col in range(cls.WIDTH):
-                # Calculate the bit position
-                bit_pos = row + cls.HEIGHT * col
-                
+                bit_pos = col * (cls.HEIGHT + 1) + row
                 if board[row][col] != 0:
-                    # Set the mask bit (occupied)
                     position.mask |= (1 << bit_pos)
-                    
-                    # Set the current_position bit if it's player 1's piece
                     if board[row][col] == 1:
                         position.current_position |= (1 << bit_pos)
-        
-        # Determine who should play next
-        # If p1_count == p2_count, it's player 1's turn
-        # If p1_count > p2_count, it's player 2's turn
-        if p1_count > p2_count:
-            # It's player 2's turn, so flip the current_position
+        position.moves = sum(row.count(1) + row.count(2) for row in board)
+        if current_player == 2:
             position.current_position ^= position.mask
-        
-        # Since we can't easily reconstruct the exact move sequence,
-        # we'll simulate it based on the final board state
-        # This won't affect the solver but might impact opening book usage
-        
-        # For opening book compatibility, try to track a plausible move sequence
-        # This is just an approximation and may not match the actual game history
-        total_moves = p1_count + p2_count
-        
-        # Count pieces in each column
-        col_counts = [0] * cls.WIDTH
-        for col in range(cls.WIDTH):
-            for row in range(cls.HEIGHT):
-                if board[row][col] != 0:
-                    col_counts[col] += 1
-        
-        # Create a plausible move sequence
-        # Start with columns that have more pieces (likely played earlier)
-        cols_with_counts = [(col, count) for col, count in enumerate(col_counts) if count > 0]
-        cols_with_counts.sort(key=lambda x: -x[1])  # Sort by count, descending
-        
-        # Assign moves alternating between players
-        sequence = []
-        for col, count in cols_with_counts:
-            for _ in range(count):
-                sequence.append(col)
-                
-        # Store the first 'total_moves' elements as our sequence
-        position._played_sequence = sequence[:total_moves]
-        
         return position
     # Ensure the Position class has the get_played_sequence method
     def get_played_sequence(self) -> str:
