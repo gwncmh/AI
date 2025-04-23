@@ -117,6 +117,32 @@ def play_vs_ai(solver: Solver, human_turn: bool = False):
 
         current_turn = not current_turn
     
+class GameState(BaseModel):
+    board: List[List[int]]
+    current_player: int
+    valid_moves: List[int]
+    is_new_game: bool = False
+
+class AIResponse(BaseModel):
+    move: int
+    is_winning_move: bool = False
+    elapsed_time: float = 0.0
+
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+api_solver = Solver()
+
+@app.get("/api/test")
+async def health_check():
+    return {"status": "ok", "message": "Server is running"}
+
 @app.post("/api/connect4-move")
 async def make_move(game_state: GameState) -> AIResponse:
     try:
