@@ -144,64 +144,84 @@ async def health_check():
 @app.post("/api/connect4-move")
 async def make_move(game_state: GameState) -> AIResponse:
     try:
+        print(f"Received game state: {game_state}")
         position = Position.from_2d_array(game_state.board)
+        print(f"Converted position: {position}")
         ai_player = game_state.current_player
+        print(f"Current player: {ai_player}")
         
         valid_moves = [col for col in range(Position.WIDTH) if position.can_play(col)]
+        print(f"Valid moves: {valid_moves}")
         if not valid_moves:
+            print("No valid moves available")
             raise ValueError("No valid moves available")
 
         start_time = time.time()
+        print(f"Checking book move at: {start_time}")
         book_move = api_solver.check_book_move(position, ai_player)
+        print(f"Book move result: {book_move}")
         
         if book_move is not None and book_move in valid_moves:
             end_time = time.time()
             is_winning = position.is_winning_move(book_move)
+            print(f"Using book move: {book_move}, is_winning: {is_winning}, time: {end_time - start_time}")
             return AIResponse(
                 move=book_move, 
                 is_winning_move=is_winning,
                 elapsed_time=end_time - start_time
             )
         
+        print("Resetting solver")
         api_solver.reset() 
         api_solver.set_timeout(9.0)
+        print("Analyzing position")
         
         scores = api_solver.analyze(position, weak=False)
+        print(f"Analysis scores: {scores}")
         best_col = -1
         best_score = -float('inf')
         
+        print("Checking for winning moves")
         for col in range(Position.WIDTH):
             if position.can_play(col) and position.is_winning_move(col):
                 best_col = col
+                print(f"Found winning move: {best_col}")
                 break
                 
         if best_col == -1:
+            print("No winning move found, selecting best score")
             for col in range(Position.WIDTH):
                 if position.can_play(col) and scores[col] > best_score:
                     best_score = scores[col]
                     best_col = col
+                    print(f"New best move: {best_col} with score: {best_score}")
         
         if best_col != -1:
             end_time = time.time()
             elapsed = end_time - start_time
             is_winning = position.is_winning_move(best_col)
+            print(f"Selected move: {best_col}, is_winning: {is_winning}, elapsed: {elapsed}")
             return AIResponse(
                 move=best_col,
                 is_winning_move=is_winning,
                 elapsed_time=elapsed
             )
         else:
+            print("No best move found, checking column order")
             for col in api_solver.column_order:
                 if col in valid_moves:
                     end_time = time.time()
+                    is_winning = position.is_winning_move(col)
+                    print(f"Using column order move: {col}, is_winning: {is_winning}")
                     return AIResponse(
                         move=col,
-                        is_winning_move=position.is_winning_move(col),
+                        is_winning_move=is_winning,
                         elapsed_time=end_time - start_time
                     )
             
             random_col = random.choice(valid_moves)
             end_time = time.time()
+            print(f"Falling back to random move: {random_col}")
             return AIResponse(
                 move=random_col,
                 is_winning_move=position.is_winning_move(random_col),
@@ -209,8 +229,10 @@ async def make_move(game_state: GameState) -> AIResponse:
             )
 
     except Exception as e:
+        print(f"Error occurred: {str(e)}")
         if 'valid_moves' in locals() and valid_moves:
             col = valid_moves[len(valid_moves) // 2]
+            print(f"Falling back to middle valid move: {col}")
             return AIResponse(move=col)
         raise HTTPException(status_code=400, detail=str(e))
 
