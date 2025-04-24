@@ -341,10 +341,11 @@ class Position:
             
         return sequence
     # Ensure the Position class has the get_played_sequence method
-    def get_played_sequence(self) -> str:
-        if not hasattr(self, '_played_sequence'):
-            return ""
-        return ''.join(str(col + 1) for col in self._played_sequence)
+    def get_played_sequence(self):
+        if isinstance(self._played_sequence, str):
+            return self._played_sequence
+        else:
+            return ''.join(str(col + 1) for col in self._played_sequence)
 
     # Ensure Position class has a clone method if it's used
     def clone(self):
