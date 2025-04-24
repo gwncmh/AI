@@ -150,12 +150,11 @@ async def make_move(game_state: GameState) -> AIResponse:
         position_bits, mask_bits, moves = Position.convert_to_bitboard(game_state.board, game_state.current_player)
         position = Position(current_position=position_bits, mask=mask_bits, moves=moves)
         
-        # Initialize play sequence - don't try to reconstruct it from the board
-        # as this doesn't preserve the actual order of play
+        # Initialize play sequence
         if hasattr(game_state, 'played_sequence') and game_state.played_sequence:
             position._played_sequence = game_state.played_sequence
         else:
-            position._played_sequence = []  # Start with empty sequence for new games
+            position._played_sequence = []
         
         print(f"Bitboard: current_position={bin(position.current_position)}, mask={bin(position.mask)}")
         print(f"Converted position: {position}")
@@ -176,21 +175,42 @@ async def make_move(game_state: GameState) -> AIResponse:
         if not valid_moves:
             print("No valid moves available")
             raise ValueError("No valid moves available")
+        
+        # Helper function to get non-losing moves
+        def get_non_losing_moves(pos, valid_cols):
+            try:
+                non_losing_mask = pos.possible_non_losing_moves()
+                non_losing_moves = []
+                for col in valid_cols:
+                    # Check if this column's bottom position is in the non-losing mask
+                    col_mask = 1 << (col * (Position.HEIGHT + 1))
+                    if (non_losing_mask & col_mask):
+                        non_losing_moves.append(col)
+                return non_losing_moves
+            except Exception as e:
+                print(f"Error getting non-losing moves: {str(e)}")
+                return []
+        
+        # Helper function to select best move from a list with center preference
+        def select_best_move(moves_list):
+            if not moves_list:
+                return None
+            # Prefer center columns
+            return sorted(moves_list, key=lambda c: abs(c - 3))[0]
 
         start_time = time.time()
         print(f"Checking book move at: {start_time}")
         book_move = api_solver.check_book_move(position, ai_player)
         print(f"Book move result: {book_move}")
 
-        if book_move is not None and book_move in valid_moves:
+        if book_move is not None and book_move in valid_moves and position.is_winning_move(book_move):
             end_time = time.time()
-            is_winning = position.is_winning_move(book_move)
-            print(f"Using book move: {book_move}, is_winning: {is_winning}, time: {end_time - start_time}")
+            print(f"Using winning book move: {book_move}")
             return AIResponse(
                 move=book_move,
-                is_winning_move=is_winning,
+                is_winning_move=True,
                 elapsed_time=end_time - start_time,
-                played_sequence=position._played_sequence + [book_move]  # Update sequence
+                played_sequence=position._played_sequence + [book_move]
             )
         
         print("Checking for winning moves before analysis")
@@ -202,148 +222,136 @@ async def make_move(game_state: GameState) -> AIResponse:
                     move=col,
                     is_winning_move=True,
                     elapsed_time=end_time - start_time,
-                    played_sequence=position._played_sequence + [col]  # Update sequence
+                    played_sequence=position._played_sequence + [col]
                 )
 
-        # Check if opponent can win next turn, and find non-losing moves
-        can_opponent_win = False
-        for col in valid_moves:
-            # Make hypothetical move
-            test_pos = position.copy()
-            if test_pos.can_play(col):
-                test_pos.play_col(col)
-                test_pos.switch_player()  # Switch to opponent
-                # Check if opponent can win after our move
-                if test_pos.can_win_next():
-                    can_opponent_win = True
-                    break
+        # Always check for non-losing moves
+        print("Checking for non-losing moves")
+        non_losing_moves = get_non_losing_moves(position, valid_moves)
+        print(f"Non-losing moves available: {non_losing_moves}")
         
-        # If opponent can potentially win, use non-losing move logic
-        if can_opponent_win:
-            print("Opponent could win soon, checking for non-losing moves")
-            non_losing_mask = position.possible_non_losing_moves()
-            if non_losing_mask:
-                # Convert bitmask to column indices
-                non_losing_moves = []
-                for col in valid_moves:
-                    # Create a bitmask for this column's bottom position
-                    col_mask = 1 << (col * (Position.HEIGHT + 1))
-                    # Check if this column's bottom bit is in the non_losing_mask
-                    if (non_losing_mask & col_mask):
-                        non_losing_moves.append(col)
-                
-                print(f"Non-losing moves available: {non_losing_moves}")
-                if non_losing_moves:
-                    # Prefer center columns among non-losing moves
-                    preferred_cols = sorted(non_losing_moves, key=lambda c: abs(c - 3))
-                    best_col = preferred_cols[0]
-                    end_time = time.time()
-                    return AIResponse(
-                        move=best_col,
-                        is_winning_move=position.is_winning_move(best_col),
-                        elapsed_time=end_time - start_time,
-                        played_sequence=position._played_sequence + [best_col]  # Update sequence
-                    )
+        # If we have a book move and it's in the non-losing moves, use it
+        if book_move is not None and book_move in valid_moves and book_move in non_losing_moves:
+            end_time = time.time()
+            print(f"Using non-losing book move: {book_move}")
+            return AIResponse(
+                move=book_move,
+                is_winning_move=False,
+                elapsed_time=end_time - start_time,
+                played_sequence=position._played_sequence + [book_move]
+            )
 
-        print(f"Solver state after reset: {api_solver}")
-        api_solver.set_timeout(7.0)
-        print(f"Analyzing position: {position}")
-
+        # Try to use solver for better move selection if we have non-losing moves
         try:
+            print(f"Solver state after reset: {api_solver}")
+            api_solver.set_timeout(6.0)
+            print(f"Analyzing position: {position}")
+
             scores = await asyncio.wait_for(
                 asyncio.to_thread(lambda: api_solver.analyze(position, weak=False)), 
-                timeout=7.0
+                timeout=6.0
             )
             print(f"Analysis completed, scores: {scores}")
-        except asyncio.TimeoutError:
-            print("Solver timed out")
-            # Use position.possible() method instead of position.possible
-            possible_mask = position.possible()
-            possible_moves = []
             
-            for col in valid_moves:
-                col_mask = 1 << (col * (Position.HEIGHT + 1))
-                if (possible_mask & col_mask):
-                    possible_moves.append(col)
+            # If we have non-losing moves, only consider those
+            candidate_moves = non_losing_moves if non_losing_moves else valid_moves
             
-            # If we have possible moves, choose one with preference for center
-            if possible_moves:
-                preferred_cols = sorted(possible_moves, key=lambda c: abs(c - 3))
-                random_col = preferred_cols[0]
+            best_col = -1
+            best_score = -float('inf')
+            print(f"Selecting best move from scores among {candidate_moves}")
+            for col in candidate_moves:
+                if scores[col] > best_score:
+                    best_score = scores[col]
+                    best_col = col
+                    print(f"New best move: {best_col} with score: {best_score}")
+
+            if best_col != -1:
+                end_time = time.time()
+                elapsed = end_time - start_time
+                is_winning = position.is_winning_move(best_col)
+                print(f"Selected move: {best_col}, is_winning: {is_winning}, elapsed: {elapsed}")
+                return AIResponse(
+                    move=best_col,
+                    is_winning_move=is_winning,
+                    elapsed_time=elapsed,
+                    played_sequence=position._played_sequence + [best_col]
+                )
             else:
-                random_col = random.choice(valid_moves)
+                # Fall back to selecting based on preference within non-losing or valid moves
+                best_col = select_best_move(candidate_moves)
+                end_time = time.time()
+                is_winning = position.is_winning_move(best_col)
+                print(f"Using preferred move from candidates: {best_col}, is_winning: {is_winning}")
+                return AIResponse(
+                    move=best_col,
+                    is_winning_move=is_winning,
+                    elapsed_time=end_time - start_time,
+                    played_sequence=position._played_sequence + [best_col]
+                )
                 
+        except Exception as e:
+            print(f"Solver error: {str(e)}")
+            # Fall back to non-losing moves or center preference
+            if non_losing_moves:
+                best_col = select_best_move(non_losing_moves)
+                print(f"Solver failed but using non-losing move: {best_col}")
+            else:
+                center_col = 3
+                if center_col in valid_moves:
+                    best_col = center_col
+                else:
+                    best_col = select_best_move(valid_moves)
+                print(f"Solver failed, no non-losing moves, using preferred move: {best_col}")
+            
             end_time = time.time()
-            print(f"Falling back to move: {random_col}")
-            return AIResponse(
-                move=random_col,
-                is_winning_move=position.is_winning_move(random_col),
-                elapsed_time=end_time - start_time,
-                played_sequence=position._played_sequence + [random_col]  # Update sequence
-            )
-
-        best_col = -1
-        best_score = -float('inf')
-        print("Selecting best move from scores")
-        for col in valid_moves:  # Use valid_moves instead of range(Position.WIDTH)
-            if scores[col] > best_score:
-                best_score = scores[col]
-                best_col = col
-                print(f"New best move: {best_col} with score: {best_score}")
-
-        if best_col != -1:
-            end_time = time.time()
-            elapsed = end_time - start_time
-            is_winning = position.is_winning_move(best_col)
-            print(f"Selected move: {best_col}, is_winning: {is_winning}, elapsed: {elapsed}")
             return AIResponse(
                 move=best_col,
-                is_winning_move=is_winning,
-                elapsed_time=elapsed,
-                played_sequence=position._played_sequence + [best_col]  # Update sequence
-            )
-        else:
-            print("No best move found, prioritizing center column")
-
-            # Prefer center column (usually 3 in a 0-based 7-column board)
-            center_col = 3
-            if center_col in valid_moves:
-                col = center_col
-            else:
-                preferred_columns = [col for col in api_solver.column_order if col in valid_moves]
-                if preferred_columns:
-                    col = preferred_columns[0]
-                else:
-                    col = random.choice(valid_moves)
-
-            end_time = time.time()
-            is_winning = position.is_winning_move(col)
-            print(f"Using fallback move: {col}, is_winning: {is_winning}")
-            return AIResponse(
-                move=col,
-                is_winning_move=is_winning,
+                is_winning_move=position.is_winning_move(best_col),
                 elapsed_time=end_time - start_time,
-                played_sequence=position._played_sequence + [col]  # Update sequence
+                played_sequence=position._played_sequence + [best_col]
             )
 
     except Exception as e:
-        print(f"Error occurred: {str(e)}")
+        print(f"Critical error occurred: {str(e)}")
         print("Stack trace:")
         traceback.print_exc()
-        if 'valid_moves' in locals() and valid_moves:
-            col = random.choice(valid_moves)
-            print(f"Falling back to random valid move: {col}")
-            return AIResponse(
-                move=col,
-                played_sequence=position._played_sequence + [col] if 'position' in locals() else []
-            )
-        elif 'game_state' in locals() and hasattr(game_state, 'valid_moves') and game_state.valid_moves:
-            col = random.choice(game_state.valid_moves)
-            print(f"Falling back to random game state move: {col}")
-            return AIResponse(
-                move=col,
-                played_sequence=[] # No sequence in error case
-            )
+        
+        try:
+            # Even in critical failures, try to identify non-losing moves
+            if 'position' in locals() and 'valid_moves' in locals():
+                non_losing_moves = get_non_losing_moves(position, valid_moves)
+                if non_losing_moves:
+                    col = select_best_move(non_losing_moves)
+                    print(f"Using non-losing move in critical error: {col}")
+                    return AIResponse(
+                        move=col,
+                        played_sequence=position._played_sequence + [col]
+                    )
+            
+            # Ultimate fallback
+            if 'valid_moves' in locals() and valid_moves:
+                col = select_best_move(valid_moves)
+                print(f"Falling back to preferred valid move: {col}")
+                return AIResponse(
+                    move=col,
+                    played_sequence=position._played_sequence + [col] if 'position' in locals() else []
+                )
+            elif 'game_state' in locals() and hasattr(game_state, 'valid_moves') and game_state.valid_moves:
+                col = select_best_move(game_state.valid_moves)
+                print(f"Falling back to preferred game state move: {col}")
+                return AIResponse(
+                    move=col,
+                    played_sequence=[] # No sequence in error case
+                )
+        except Exception as inner_e:
+            print(f"Even fallback error handling failed: {str(inner_e)}")
+            # Try one last attempt with first valid move
+            if 'valid_moves' in locals() and valid_moves:
+                return AIResponse(move=valid_moves[0])
+            elif 'game_state' in locals() and hasattr(game_state, 'valid_moves') and game_state.valid_moves:
+                return AIResponse(move=game_state.valid_moves[0])
+        
+        # If all else fails
         raise HTTPException(status_code=400, detail=str(e))
 def main():
     solver = Solver()
