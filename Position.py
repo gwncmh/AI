@@ -306,9 +306,6 @@ class Position:
         return position, mask, moves
     # Ensure the Position class has the get_played_sequence method
     def get_played_sequence(self) -> str:
-        """
-        Returns the sequence of moves played so far as a string of column numbers (1-indexed)
-        """
         if not hasattr(self, '_played_sequence'):
             return ""
         return ''.join(str(col + 1) for col in self._played_sequence)

@@ -154,6 +154,9 @@ async def make_move(game_state: GameState) -> AIResponse:
         # Create a new Position instance with the converted values
         position = Position(current_position=position_bits, mask=mask_bits, moves=moves)
         
+        if not hasattr(position, '_played_sequence') or not position._played_sequence:
+            position._played_sequence = []
+        
         print(f"Bitboard: current_position={bin(position.current_position)}, mask={bin(position.mask)}")
         print(f"Converted position: {position}")
         ai_player = game_state.current_player
