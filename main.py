@@ -206,6 +206,38 @@ async def make_move(game_state: GameState) -> AIResponse:
                     elapsed_time=end_time - start_time
                 )
 
+        # Check if opponent can win next turn, and find non-losing moves
+        can_opponent_win = False
+        for col in valid_moves:
+            # Make hypothetical move
+            test_pos = position.copy()
+            if test_pos.can_play(col):
+                test_pos.play_col(col)
+                test_pos.switch_player()  # Switch to opponent
+                # Check if opponent can win after our move
+                if test_pos.can_win_next():
+                    can_opponent_win = True
+                    break
+        
+        # If opponent can potentially win, use non-losing move logic
+        if can_opponent_win:
+            print("Opponent could win soon, checking for non-losing moves")
+            non_losing_mask = position.possible_non_losing_moves()
+            if non_losing_mask:
+                non_losing_moves = [col for col in valid_moves if 
+                                    (non_losing_mask & (1 << (col * (Position.HEIGHT + 1))))]
+                print(f"Non-losing moves available: {non_losing_moves}")
+                if non_losing_moves:
+                    # Prefer center columns among non-losing moves
+                    preferred_cols = sorted(non_losing_moves, key=lambda c: abs(c - 3))
+                    best_col = preferred_cols[0]
+                    end_time = time.time()
+                    return AIResponse(
+                        move=best_col,
+                        is_winning_move=position.is_winning_move(best_col),
+                        elapsed_time=end_time - start_time
+                    )
+
         print(f"Solver state after reset: {api_solver}")
         api_solver.set_timeout(6.0)
         print(f"Analyzing position: {position}")
@@ -218,9 +250,20 @@ async def make_move(game_state: GameState) -> AIResponse:
             print(f"Analysis completed, scores: {scores}")
         except asyncio.TimeoutError:
             print("Solver timed out")
-            random_col = random.choice(valid_moves)
+            # Use position.possible() method instead of position.possible
+            possible_mask = position.possible()
+            possible_moves = [col for col in valid_moves if 
+                              (possible_mask & (1 << (col * (Position.HEIGHT + 1))))]
+            
+            # If we have possible moves, choose one with preference for center
+            if possible_moves:
+                preferred_cols = sorted(possible_moves, key=lambda c: abs(c - 3))
+                random_col = preferred_cols[0]
+            else:
+                random_col = random.choice(valid_moves)
+                
             end_time = time.time()
-            print(f"Falling back to random move: {random_col}")
+            print(f"Falling back to move: {random_col}")
             return AIResponse(
                 move=random_col,
                 is_winning_move=position.is_winning_move(random_col),
