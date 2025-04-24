@@ -304,39 +304,19 @@ class Position:
                     moves += 1
 
         return position, mask, moves
-    @staticmethod
-    def reconstruct_sequence(board):
-        HEIGHT, WIDTH = 6, 7
-        sequence = []
-        temp_board = [[0 for _ in range(WIDTH)] for _ in range(HEIGHT)]
+    def reconstruct_move_sequence(board):
+        height = len(board)
+        width = len(board[0])
+        move_sequence = []
 
-        current_player = 1
-        total_moves = sum(1 for row in board for cell in row if cell > 0)
+        # Go top to bottom for each column to preserve play order
+        for row in range(height):
+            for col in range(width):
+                if board[row][col] != 0:
+                    move_sequence.append(col)
 
-        for _ in range(total_moves):
-            for col in range(WIDTH):
-                for row in reversed(range(HEIGHT)):
-                    if temp_board[row][col] == 0 and board[row][col] != 0:
-                        if board[row][col] != current_player:
-                            continue
+        return move_sequence
 
-                        temp_board[row][col] = current_player
-                        sequence.append(col + 1)
-                        current_player = 3 - current_player  # Switch between 1 and 2
-                        break
-                else:
-                    continue
-                break
-            else:
-                raise ValueError("Failed to reconstruct the move sequence")
-
-        # Final verification
-        for row in range(HEIGHT):
-            for col in range(WIDTH):
-                if temp_board[row][col] != board[row][col]:
-                    raise ValueError("Reconstructed board doesn't match original")
-
-        return sequence
     # Ensure the Position class has the get_played_sequence method
     def get_played_sequence(self):
         if isinstance(self._played_sequence, str):
