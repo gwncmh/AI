@@ -307,50 +307,35 @@ class Position:
     @staticmethod
     def reconstruct_sequence(board):
         HEIGHT, WIDTH = 6, 7
-        # Create an empty board
-        temp_board = [[0 for _ in range(WIDTH)] for _ in range(HEIGHT)]
         sequence = []
-        
-        # Count total pieces
-        total_pieces = sum(1 for row in board for cell in row if cell > 0)
-        
-        # For each move (starting from the bottom of each column)
-        for _ in range(total_pieces):
-            found_move = False
-            
-            # Try each column
+        temp_board = [[0 for _ in range(WIDTH)] for _ in range(HEIGHT)]
+
+        current_player = 1
+        total_moves = sum(1 for row in board for cell in row if cell > 0)
+
+        for _ in range(total_moves):
             for col in range(WIDTH):
-                # Count pieces in this column in both boards
-                target_col_pieces = [board[row][col] for row in range(HEIGHT)]
-                temp_col_pieces = [temp_board[row][col] for row in range(HEIGHT)]
-                
-                # If we can add a piece to this column
-                pieces_in_temp = sum(1 for cell in temp_col_pieces if cell > 0)
-                pieces_in_target = sum(1 for cell in target_col_pieces if cell > 0)
-                
-                if pieces_in_temp < pieces_in_target:
-                    # Determine which player's piece to add
-                    # The next piece must be at the next available space (from bottom)
-                    row = HEIGHT - 1
-                    while row >= 0 and temp_board[row][col] != 0:
-                        row -= 1
-                    
-                    if row >= 0 and board[row][col] != 0:
-                        # Add this piece
-                        temp_board[row][col] = board[row][col]
-                        sequence.append(col + 1)  # 1-indexed
-                        found_move = True
+                for row in reversed(range(HEIGHT)):
+                    if temp_board[row][col] == 0 and board[row][col] != 0:
+                        if board[row][col] != current_player:
+                            continue
+
+                        temp_board[row][col] = current_player
+                        sequence.append(col + 1)
+                        current_player = 3 - current_player  # Switch between 1 and 2
                         break
-            
-            if not found_move:
+                else:
+                    continue
+                break
+            else:
                 raise ValueError("Failed to reconstruct the move sequence")
-        
-        # Verify
+
+        # Final verification
         for row in range(HEIGHT):
             for col in range(WIDTH):
                 if temp_board[row][col] != board[row][col]:
-                    raise ValueError("Failed to reconstruct the sequence correctly")
-        
+                    raise ValueError("Reconstructed board doesn't match original")
+
         return sequence
     # Ensure the Position class has the get_played_sequence method
     def get_played_sequence(self):

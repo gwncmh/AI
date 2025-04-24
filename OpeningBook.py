@@ -60,14 +60,6 @@ class OpeningBook:
 
         return None
 
-        # Check battles.txt
-        battle_move = self.check_battles_book(current_sequence, ai_player)
-        if battle_move is not None and position.can_play(battle_move):
-            print(f"Using battles.txt move: {battle_move}")
-            return battle_move
-
-        return None
-
     def check_battles_book(self, current_sequence: str, ai_player: int) -> Optional[int]:
         try:
             with open(self.book_file, "r") as file:
