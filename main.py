@@ -149,17 +149,13 @@ async def make_move(game_state: GameState) -> AIResponse:
         print(f"Received game state: {game_state}")
         position_bits, mask_bits, moves = Position.convert_to_bitboard(game_state.board, game_state.current_player)
         position = Position(current_position=position_bits, mask=mask_bits, moves=moves)
-        if not game_state.is_new_game:
-            try:
-                # Reconstruct the sequence of moves that led to this position (1-indexed)
-                move_sequence = Position.reconstruct_sequence(game_state.board)
-                position._played_sequence = ''.join(map(str, move_sequence))  # Store as string of digits
-                print(f"Reconstructed sequence: {move_sequence}")
-            except Exception as e:
-                print(f"Error reconstructing sequence: {str(e)}")
-                position._played_sequence = ''
+        
+        # Initialize play sequence - don't try to reconstruct it from the board
+        # as this doesn't preserve the actual order of play
+        if hasattr(game_state, 'played_sequence') and game_state.played_sequence:
+            position._played_sequence = game_state.played_sequence
         else:
-            position._played_sequence = ''
+            position._played_sequence = []  # Start with empty sequence for new games
         
         print(f"Bitboard: current_position={bin(position.current_position)}, mask={bin(position.mask)}")
         print(f"Converted position: {position}")
@@ -172,6 +168,7 @@ async def make_move(game_state: GameState) -> AIResponse:
         print(f"API valid moves: {api_valid_moves}")
         print(f"Position valid moves: {pos_valid_moves}")
         print(f"Played sequence: {position._played_sequence}")
+        
         # Trust the game state's valid moves over the Position class calculation
         valid_moves = api_valid_moves if api_valid_moves else pos_valid_moves
         
@@ -192,7 +189,8 @@ async def make_move(game_state: GameState) -> AIResponse:
             return AIResponse(
                 move=book_move,
                 is_winning_move=is_winning,
-                elapsed_time=end_time - start_time
+                elapsed_time=end_time - start_time,
+                played_sequence=position._played_sequence + [book_move]  # Update sequence
             )
         
         print("Checking for winning moves before analysis")
@@ -203,7 +201,8 @@ async def make_move(game_state: GameState) -> AIResponse:
                 return AIResponse(
                     move=col,
                     is_winning_move=True,
-                    elapsed_time=end_time - start_time
+                    elapsed_time=end_time - start_time,
+                    played_sequence=position._played_sequence + [col]  # Update sequence
                 )
 
         # Check if opponent can win next turn, and find non-losing moves
@@ -224,8 +223,15 @@ async def make_move(game_state: GameState) -> AIResponse:
             print("Opponent could win soon, checking for non-losing moves")
             non_losing_mask = position.possible_non_losing_moves()
             if non_losing_mask:
-                non_losing_moves = [col for col in valid_moves if 
-                                    (non_losing_mask & (1 << (col * (Position.HEIGHT + 1))))]
+                # Convert bitmask to column indices
+                non_losing_moves = []
+                for col in valid_moves:
+                    # Create a bitmask for this column's bottom position
+                    col_mask = 1 << (col * (Position.HEIGHT + 1))
+                    # Check if this column's bottom bit is in the non_losing_mask
+                    if (non_losing_mask & col_mask):
+                        non_losing_moves.append(col)
+                
                 print(f"Non-losing moves available: {non_losing_moves}")
                 if non_losing_moves:
                     # Prefer center columns among non-losing moves
@@ -235,7 +241,8 @@ async def make_move(game_state: GameState) -> AIResponse:
                     return AIResponse(
                         move=best_col,
                         is_winning_move=position.is_winning_move(best_col),
-                        elapsed_time=end_time - start_time
+                        elapsed_time=end_time - start_time,
+                        played_sequence=position._played_sequence + [best_col]  # Update sequence
                     )
 
         print(f"Solver state after reset: {api_solver}")
@@ -252,8 +259,12 @@ async def make_move(game_state: GameState) -> AIResponse:
             print("Solver timed out")
             # Use position.possible() method instead of position.possible
             possible_mask = position.possible()
-            possible_moves = [col for col in valid_moves if 
-                              (possible_mask & (1 << (col * (Position.HEIGHT + 1))))]
+            possible_moves = []
+            
+            for col in valid_moves:
+                col_mask = 1 << (col * (Position.HEIGHT + 1))
+                if (possible_mask & col_mask):
+                    possible_moves.append(col)
             
             # If we have possible moves, choose one with preference for center
             if possible_moves:
@@ -267,7 +278,8 @@ async def make_move(game_state: GameState) -> AIResponse:
             return AIResponse(
                 move=random_col,
                 is_winning_move=position.is_winning_move(random_col),
-                elapsed_time=end_time - start_time
+                elapsed_time=end_time - start_time,
+                played_sequence=position._played_sequence + [random_col]  # Update sequence
             )
 
         best_col = -1
@@ -287,7 +299,8 @@ async def make_move(game_state: GameState) -> AIResponse:
             return AIResponse(
                 move=best_col,
                 is_winning_move=is_winning,
-                elapsed_time=elapsed
+                elapsed_time=elapsed,
+                played_sequence=position._played_sequence + [best_col]  # Update sequence
             )
         else:
             print("No best move found, prioritizing center column")
@@ -309,7 +322,8 @@ async def make_move(game_state: GameState) -> AIResponse:
             return AIResponse(
                 move=col,
                 is_winning_move=is_winning,
-                elapsed_time=end_time - start_time
+                elapsed_time=end_time - start_time,
+                played_sequence=position._played_sequence + [col]  # Update sequence
             )
 
     except Exception as e:
@@ -319,11 +333,17 @@ async def make_move(game_state: GameState) -> AIResponse:
         if 'valid_moves' in locals() and valid_moves:
             col = random.choice(valid_moves)
             print(f"Falling back to random valid move: {col}")
-            return AIResponse(move=col)
+            return AIResponse(
+                move=col,
+                played_sequence=position._played_sequence + [col] if 'position' in locals() else []
+            )
         elif 'game_state' in locals() and hasattr(game_state, 'valid_moves') and game_state.valid_moves:
             col = random.choice(game_state.valid_moves)
             print(f"Falling back to random game state move: {col}")
-            return AIResponse(move=col)
+            return AIResponse(
+                move=col,
+                played_sequence=[] # No sequence in error case
+            )
         raise HTTPException(status_code=400, detail=str(e))
 def main():
     solver = Solver()
