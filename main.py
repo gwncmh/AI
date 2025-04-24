@@ -207,13 +207,13 @@ async def make_move(game_state: GameState) -> AIResponse:
                 )
 
         print(f"Solver state after reset: {api_solver}")
-        api_solver.set_timeout(9.0)
+        api_solver.set_timeout(7.0)
         print(f"Analyzing position: {position}")
 
         try:
             scores = await asyncio.wait_for(
                 asyncio.to_thread(lambda: api_solver.analyze(position, weak=False)), 
-                timeout=9.0
+                timeout=7.0
             )
             print(f"Analysis completed, scores: {scores}")
         except asyncio.TimeoutError:
