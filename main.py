@@ -167,7 +167,7 @@ async def make_move(game_state: GameState) -> AIResponse:
         pos_valid_moves = [col for col in range(Position.WIDTH) if position.can_play(col)]
         print(f"API valid moves: {api_valid_moves}")
         print(f"Position valid moves: {pos_valid_moves}")
-        
+        print(f"Played sequence: {position._played_sequence}")
         # Trust the game state's valid moves over the Position class calculation
         valid_moves = api_valid_moves if api_valid_moves else pos_valid_moves
         
