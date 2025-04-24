@@ -225,7 +225,7 @@ class Solver:
                     new_pos = Position(position)
                     new_pos.play_col(col)
                     scores[col] = -self.solve(new_pos, weak)
-        
+        print(f"Column scores: {scores}")
         return scores
 
     def set_timeout(self, seconds: float):
