@@ -304,7 +304,7 @@ class Position:
                     moves += 1
 
         return position, mask, moves
-    def reconstruct_move_sequence(board):
+    def reconstruct_sequence(board):
         height = len(board)
         width = len(board[0])
         move_sequence = []
