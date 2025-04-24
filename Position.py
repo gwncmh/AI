@@ -304,6 +304,30 @@ class Position:
                     moves += 1
 
         return position, mask, moves
+    @staticmethod
+    def reconstruct_sequence(board: List[List[int]]) -> List[int]:
+        WIDTH, HEIGHT = 7, 6
+        sequence = []
+        
+        # For each column, count pieces from bottom to top
+        col_counts = [0] * WIDTH
+        for col in range(WIDTH):
+            for row in reversed(range(HEIGHT)):  # Start from bottom (highest row index)
+                if board[row][col] != 0:
+                    col_counts[col] += 1
+        
+        # Simulate dropping pieces based on counts
+        remaining = sum(col_counts)
+        while remaining > 0:
+            for col in range(WIDTH):
+                if col_counts[col] > 0:
+                    sequence.append(col)
+                    col_counts[col] -= 1
+                    remaining -= 1
+                    if remaining == 0:
+                        break
+        
+        return sequence
     # Ensure the Position class has the get_played_sequence method
     def get_played_sequence(self) -> str:
         if not hasattr(self, '_played_sequence'):

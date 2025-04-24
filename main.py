@@ -147,14 +147,18 @@ async def health_check():
 async def make_move(game_state: GameState) -> AIResponse:
     try:
         print(f"Received game state: {game_state}")
-        
-        # Use the convert_to_bitboard method instead of from_2d_array
         position_bits, mask_bits, moves = Position.convert_to_bitboard(game_state.board, game_state.current_player)
-        
-        # Create a new Position instance with the converted values
         position = Position(current_position=position_bits, mask=mask_bits, moves=moves)
-        
-        if not hasattr(position, '_played_sequence') or not position._played_sequence:
+        if not game_state.is_new_game:
+            try:
+                # Reconstruct the sequence of moves that led to this position
+                move_sequence = Position.reconstruct_sequence(game_state.board)
+                position._played_sequence = move_sequence
+                print(f"Reconstructed sequence: {move_sequence}")
+            except Exception as e:
+                print(f"Error reconstructing sequence: {str(e)}")
+                position._played_sequence = []
+        else:
             position._played_sequence = []
         
         print(f"Bitboard: current_position={bin(position.current_position)}, mask={bin(position.mask)}")
