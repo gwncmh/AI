@@ -306,39 +306,51 @@ class Position:
         return position, mask, moves
     @staticmethod
     def reconstruct_sequence(board):
-        temp_board = [[0 for _ in range(7)] for _ in range(6)]
+        HEIGHT, WIDTH = 6, 7
+        # Create an empty board
+        temp_board = [[0 for _ in range(WIDTH)] for _ in range(HEIGHT)]
         sequence = []
         
-        # Count total pieces to determine how many moves to reconstruct
+        # Count total pieces
         total_pieces = sum(1 for row in board for cell in row if cell > 0)
         
-        # Track whose turn it is during reconstruction
-        current_player = 1  # Start with player 1
-        
+        # For each move (starting from the bottom of each column)
         for _ in range(total_pieces):
-            # Find the next move in the sequence
-            for col in range(7):  # Check each column
-                # Find the highest empty row in this column
-                for row in range(5, -1, -1):
-                    if temp_board[row][col] == 0:  # Found an empty cell
-                        # Check if this matches the target board
-                        if board[row][col] == current_player:
-                            # This is the next move
-                            temp_board[row][col] = current_player
-                            # Store as 1-indexed column (1-7)
-                            sequence.append(col + 1)
-                            # Switch players
-                            current_player = 3 - current_player  # Toggle between 1 and 2
-                            break
-                if len(sequence) == total_pieces:
-                    break
-            if len(sequence) == total_pieces:
-                break
-        
-        # Verify the reconstruction
-        if temp_board != board:
-            raise ValueError("Failed to reconstruct the sequence correctly")
+            found_move = False
             
+            # Try each column
+            for col in range(WIDTH):
+                # Count pieces in this column in both boards
+                target_col_pieces = [board[row][col] for row in range(HEIGHT)]
+                temp_col_pieces = [temp_board[row][col] for row in range(HEIGHT)]
+                
+                # If we can add a piece to this column
+                pieces_in_temp = sum(1 for cell in temp_col_pieces if cell > 0)
+                pieces_in_target = sum(1 for cell in target_col_pieces if cell > 0)
+                
+                if pieces_in_temp < pieces_in_target:
+                    # Determine which player's piece to add
+                    # The next piece must be at the next available space (from bottom)
+                    row = HEIGHT - 1
+                    while row >= 0 and temp_board[row][col] != 0:
+                        row -= 1
+                    
+                    if row >= 0 and board[row][col] != 0:
+                        # Add this piece
+                        temp_board[row][col] = board[row][col]
+                        sequence.append(col + 1)  # 1-indexed
+                        found_move = True
+                        break
+            
+            if not found_move:
+                raise ValueError("Failed to reconstruct the move sequence")
+        
+        # Verify
+        for row in range(HEIGHT):
+            for col in range(WIDTH):
+                if temp_board[row][col] != board[row][col]:
+                    raise ValueError("Failed to reconstruct the sequence correctly")
+        
         return sequence
     # Ensure the Position class has the get_played_sequence method
     def get_played_sequence(self):
