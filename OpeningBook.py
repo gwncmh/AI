@@ -47,10 +47,18 @@ class OpeningBook:
         # Check in-memory winning sequences
         for sequence, data in self.winning_sequences.items():
             if sequence.startswith(current_sequence) and len(sequence) > len(current_sequence):
-                next_move = int(sequence[len(current_sequence)]) - 1
+                next_move = int(sequence[len(current_sequence)]) - 1  # Convert to 0-indexed for the game
                 if position.can_play(next_move) and data["winner"] in {ai_player, 0}:
                     print(f"Using in-memory book move: {next_move} from sequence {sequence}")
                     return next_move
+
+        # Check battles.txt
+        battle_move = self.check_battles_book(current_sequence, ai_player)
+        if battle_move is not None and position.can_play(battle_move):
+            print(f"Using battles.txt move: {battle_move}")
+            return battle_move
+
+        return None
 
         # Check battles.txt
         battle_move = self.check_battles_book(current_sequence, ai_player)

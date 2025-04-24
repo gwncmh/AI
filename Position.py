@@ -305,28 +305,40 @@ class Position:
 
         return position, mask, moves
     @staticmethod
-    def reconstruct_sequence(board: List[List[int]]) -> List[int]:
-        WIDTH, HEIGHT = 7, 6
+    def reconstruct_sequence(board):
+        temp_board = [[0 for _ in range(7)] for _ in range(6)]
         sequence = []
         
-        # For each column, count pieces from bottom to top
-        col_counts = [0] * WIDTH
-        for col in range(WIDTH):
-            for row in reversed(range(HEIGHT)):  # Start from bottom (highest row index)
-                if board[row][col] != 0:
-                    col_counts[col] += 1
+        # Count total pieces to determine how many moves to reconstruct
+        total_pieces = sum(1 for row in board for cell in row if cell > 0)
         
-        # Simulate dropping pieces based on counts
-        remaining = sum(col_counts)
-        while remaining > 0:
-            for col in range(WIDTH):
-                if col_counts[col] > 0:
-                    sequence.append(col)
-                    col_counts[col] -= 1
-                    remaining -= 1
-                    if remaining == 0:
-                        break
+        # Track whose turn it is during reconstruction
+        current_player = 1  # Start with player 1
         
+        for _ in range(total_pieces):
+            # Find the next move in the sequence
+            for col in range(7):  # Check each column
+                # Find the highest empty row in this column
+                for row in range(5, -1, -1):
+                    if temp_board[row][col] == 0:  # Found an empty cell
+                        # Check if this matches the target board
+                        if board[row][col] == current_player:
+                            # This is the next move
+                            temp_board[row][col] = current_player
+                            # Store as 1-indexed column (1-7)
+                            sequence.append(col + 1)
+                            # Switch players
+                            current_player = 3 - current_player  # Toggle between 1 and 2
+                            break
+                if len(sequence) == total_pieces:
+                    break
+            if len(sequence) == total_pieces:
+                break
+        
+        # Verify the reconstruction
+        if temp_board != board:
+            raise ValueError("Failed to reconstruct the sequence correctly")
+            
         return sequence
     # Ensure the Position class has the get_played_sequence method
     def get_played_sequence(self) -> str:

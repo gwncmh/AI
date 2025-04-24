@@ -151,15 +151,15 @@ async def make_move(game_state: GameState) -> AIResponse:
         position = Position(current_position=position_bits, mask=mask_bits, moves=moves)
         if not game_state.is_new_game:
             try:
-                # Reconstruct the sequence of moves that led to this position
+                # Reconstruct the sequence of moves that led to this position (1-indexed)
                 move_sequence = Position.reconstruct_sequence(game_state.board)
-                position._played_sequence = move_sequence
+                position._played_sequence = ''.join(map(str, move_sequence))  # Store as string of digits
                 print(f"Reconstructed sequence: {move_sequence}")
             except Exception as e:
                 print(f"Error reconstructing sequence: {str(e)}")
-                position._played_sequence = []
+                position._played_sequence = ''
         else:
-            position._played_sequence = []
+            position._played_sequence = ''
         
         print(f"Bitboard: current_position={bin(position.current_position)}, mask={bin(position.mask)}")
         print(f"Converted position: {position}")
