@@ -313,7 +313,7 @@ class Position:
         for row in range(height):
             for col in range(width):
                 if board[row][col] != 0:
-                    move_sequence.append(col)
+                    move_sequence.append(col+1)
 
         return move_sequence
 
