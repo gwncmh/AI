@@ -206,8 +206,6 @@ async def make_move(game_state: GameState) -> AIResponse:
                     elapsed_time=end_time - start_time
                 )
 
-        print(f"Solver state before reset: {api_solver}")
-        api_solver.reset()
         print(f"Solver state after reset: {api_solver}")
         api_solver.set_timeout(9.0)
         print(f"Analyzing position: {position}")
@@ -249,25 +247,25 @@ async def make_move(game_state: GameState) -> AIResponse:
                 elapsed_time=elapsed
             )
         else:
-            print("No best move found, checking column order")
-            preferred_columns = [col for col in api_solver.column_order if col in valid_moves]
-            if preferred_columns:
-                col = preferred_columns[0]
-                end_time = time.time()
-                is_winning = position.is_winning_move(col)
-                print(f"Using column order move: {col}, is_winning: {is_winning}")
-                return AIResponse(
-                    move=col,
-                    is_winning_move=is_winning,
-                    elapsed_time=end_time - start_time
-                )
+            print("No best move found, prioritizing center column")
 
-            random_col = random.choice(valid_moves)
+            # Prefer center column (usually 3 in a 0-based 7-column board)
+            center_col = 3
+            if center_col in valid_moves:
+                col = center_col
+            else:
+                preferred_columns = [col for col in api_solver.column_order if col in valid_moves]
+                if preferred_columns:
+                    col = preferred_columns[0]
+                else:
+                    col = random.choice(valid_moves)
+
             end_time = time.time()
-            print(f"Falling back to random move: {random_col}")
+            is_winning = position.is_winning_move(col)
+            print(f"Using fallback move: {col}, is_winning: {is_winning}")
             return AIResponse(
-                move=random_col,
-                is_winning_move=position.is_winning_move(random_col),
+                move=col,
+                is_winning_move=is_winning,
                 elapsed_time=end_time - start_time
             )
 
