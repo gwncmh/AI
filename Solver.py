@@ -42,7 +42,7 @@ class Solver:
         """Add a sequence to the opening book"""
         self.opening_book.add_sequence(sequence, winner)
 
-    def negamax(self, position: Position, alpha: int, beta: int, depth: int = 0, max_depth: int = 16) -> int:
+    def negamax(self, position: Position, alpha: int, beta: int, depth: int = 0, max_depth: int = 12) -> int:
         assert alpha < beta
         assert not position.can_win_next()
         
