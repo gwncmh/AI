@@ -310,7 +310,7 @@ class Position:
         move_sequence = []
 
         # Go top to bottom for each column to preserve play order
-        for row in range(height):
+        for row in reversed(range(height)):
             for col in range(width):
                 if board[row][col] != 0:
                     move_sequence.append(col+1)
